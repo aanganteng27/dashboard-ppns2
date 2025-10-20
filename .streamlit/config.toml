@@ -1,0 +1,6 @@
+[theme]
+primaryColor="#0057A8"              # Biru utama KKP (tombol, slider)
+backgroundColor="#FFFFFF"           # Putih bersih
+secondaryBackgroundColor="#F2F4F7"  # Abu lembut sidebar/card
+textColor="#003366"                 # Biru tua untuk teks
+font="sans serif"

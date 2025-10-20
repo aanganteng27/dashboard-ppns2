@@ -1,0 +1,9 @@
+streamlit>=1.25.0
+pandas
+openpyxl
+plotly
+gspread
+google-auth
+reportlab
+pillow
+numpy
