@@ -682,96 +682,100 @@ def export_dashboard_pdf(figures_dict=None, tables_dict=None, author_name="PPNS 
 # ================================
 # BACA FILE EXCEL
 # ================================
-uploaded_file = st.file_uploader("📤 Unggah file Excel (.xlsx)", type=["xlsx"])
+import os
+import pandas as pd
+import streamlit as st
 
-if uploaded_file:
-    try:
+default_path = "Data PPNS UPDATE JULI.xlsx"  # nama file Excel default
+
+try:
+    # ================================
+    # CEK FILE DEFAULT
+    # ================================
+    if os.path.exists(default_path):
+        with st.spinner("📊 Membuka file Excel default..."):
+            xls = pd.ExcelFile(default_path)
+            sheet_names = xls.sheet_names
+            st.success("✅ File default berhasil dimuat otomatis!")
+            selected_sheet = st.selectbox("📄 Pilih Sheet:", sheet_names)
+            excel_source = default_path
+    else:
+        uploaded_file = st.file_uploader("📤 Unggah file Excel (.xlsx)", type=["xlsx"])
+        if not uploaded_file:
+            st.warning("⚠ Silakan unggah file Excel terlebih dahulu.")
+            st.stop()
+
         with st.spinner("⏳ Membaca file & menyiapkan dashboard..."):
             xls = pd.ExcelFile(uploaded_file)
             sheet_names = xls.sheet_names
+            st.success("✅ File berhasil dimuat!")
+            selected_sheet = st.selectbox("📄 Pilih Sheet:", sheet_names)
+            excel_source = uploaded_file
 
-        # Pilih sheet yang akan dibaca
-        selected_sheet = st.selectbox("📄 Pilih Sheet:", sheet_names)
-
-        # Baca file tanpa header untuk deteksi header asli
-        raw_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=None, dtype=object)
-
-        if raw_df.empty:
-            st.warning(f"⚠ Sheet '{selected_sheet}' kosong.")
-            st.stop()
-
-        # ======================================
-        # DETEKSI OTOMATIS BARIS HEADER ASLI
-        # ======================================
-        header_row_idx = None
-        for i, row in raw_df.iterrows():
-            # cari baris yang mengandung "UNIT KERJA" atau "NO" (biasanya header)
-            if row.astype(str).str.contains("UNIT KERJA|NO", case=False, na=False).any():
-                header_row_idx = i
-                break
-
-        if header_row_idx is not None:
-            # gunakan baris yang ditemukan sebagai header
-            df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=header_row_idx, dtype=object)
-        else:
-            # fallback jika tidak ditemukan
-            df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=0, dtype=object)
-
-        # ======================================
-        # PEMBERSIHAN DATAFRAME
-        # ======================================
-
-        # Hilangkan kolom dengan nama 'Unnamed'
-        df.columns = [
-            str(c).replace("Unnamed: ", "").strip() if "Unnamed" in str(c) else str(c).strip()
-            for c in df.columns
-        ]
-
-        # Hapus baris kosong di atas header jika masih ada
-        while df.iloc[0].isna().all():
-            df = df.iloc[1:].reset_index(drop=True)
-
-        # Hapus baris yang benar-benar kosong
-        df.dropna(how="all", inplace=True)
-        df.reset_index(drop=True, inplace=True)
-
-        if df.empty:
-            st.warning(f"⚠ Sheet '{selected_sheet}' tidak berisi data setelah dibersihkan.")
-            st.stop()
-
-        # ======================================
-        # SIAPKAN UNTUK UI
-        # ======================================
-        def drop_truly_empty_or_unnamed_columns(dataframe):
-            """Hapus kolom kosong atau unnamed sepenuhnya"""
-            return dataframe.loc[:, ~(dataframe.columns.astype(str).str.startswith("Unnamed"))]
-
-        df_for_ui = drop_truly_empty_or_unnamed_columns(df.copy())
-        df_for_ui.columns = [str(c).strip() for c in df_for_ui.columns]
-
-        # Ganti NaN jadi tanda '-'
-        df_for_ui = df_for_ui.fillna("-")
-
-        # -------------------------------
-        # Simpan ke session state
-        # -------------------------------
-        if "df_original" not in st.session_state:
-            st.session_state["df_original"] = df.copy()
-
-        st.session_state["df_current"] = df_for_ui.copy()
-
-        # -------------------------------
-        # TAMPILKAN DI UI STREAMLIT
-        # -------------------------------
-        st.success("✅ File berhasil dibaca dan header diperbaiki otomatis!")
-        st.dataframe(df_for_ui, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"❌ Terjadi kesalahan saat membaca file: {e}")
-
-    except Exception as e:
-        st.error(f"Terjadi kesalahan saat membaca atau memproses file Excel: {e}")
+    # ================================
+    # BACA RAW DATA
+    # ================================
+    raw_df = pd.read_excel(excel_source, sheet_name=selected_sheet, header=None, dtype=object)
+    if raw_df.empty:
+        st.warning(f"⚠ Sheet '{selected_sheet}' kosong.")
         st.stop()
+
+    # ================================
+    # DETEKSI OTOMATIS BARIS HEADER
+    # ================================
+    header_row_idx = None
+    for i, row in raw_df.iterrows():
+        if row.astype(str).str.contains("UNIT KERJA|NO", case=False, na=False).any():
+            header_row_idx = i
+            break
+
+    if header_row_idx is not None:
+        df = pd.read_excel(excel_source, sheet_name=selected_sheet, header=header_row_idx, dtype=object)
+    else:
+        df = pd.read_excel(excel_source, sheet_name=selected_sheet, header=0, dtype=object)
+
+    # ================================
+    # PEMBERSIHAN DATAFRAME
+    # ================================
+    df.columns = [
+        str(c).replace("Unnamed: ", "").strip() if "Unnamed" in str(c) else str(c).strip()
+        for c in df.columns
+    ]
+
+    while df.iloc[0].isna().all():
+        df = df.iloc[1:].reset_index(drop=True)
+
+    df.dropna(how="all", inplace=True)
+    df.reset_index(drop=True, inplace=True)
+
+    if df.empty:
+        st.warning(f"⚠ Sheet '{selected_sheet}' tidak berisi data setelah dibersihkan.")
+        st.stop()
+
+    # ================================
+    # PERSIAPAN UNTUK UI
+    # ================================
+    def drop_truly_empty_or_unnamed_columns(dataframe):
+        """Hapus kolom kosong atau unnamed sepenuhnya"""
+        return dataframe.loc[:, ~(dataframe.columns.astype(str).str.startswith("Unnamed"))]
+
+    df_for_ui = drop_truly_empty_or_unnamed_columns(df.copy())
+    df_for_ui.columns = [str(c).strip() for c in df_for_ui.columns]
+    df_for_ui = df_for_ui.fillna("-")
+
+    # Simpan ke session state
+    st.session_state["df_original"] = df.copy()
+    st.session_state["df_current"] = df_for_ui.copy()
+
+    # ================================
+    # TAMPILKAN HASIL DI UI
+    # ================================
+    st.success("✅ File berhasil dibaca dan header diperbaiki otomatis!")
+    st.dataframe(df_for_ui, use_container_width=True)
+
+except Exception as e:
+    st.error(f"❌ Terjadi kesalahan saat membaca atau memproses file Excel: {e}")
+    st.stop()
 
     # -------------------------------
     # Store original and current in session state
@@ -838,19 +842,19 @@ if st.session_state.sidebar_radio_menu != st.session_state.active_tab:
     st.session_state.active_tab = st.session_state.sidebar_radio_menu
 
 # ================================
-# Cek apakah file diupload
+# Cek apakah ada file yang dipakai
 # ================================
-if uploaded_file:
+if "df_current" in st.session_state and not st.session_state["df_current"].empty:
     try:
         # Ambil df_current dari session
-        df_current = st.session_state.get("df_current", pd.DataFrame())
+        df_current = st.session_state["df_current"]
 
         if menu == "📋 Data":
             # === TAB 1 ===
             st.subheader("📋 Tabel Data")
             st.write("🔎 Pencarian cepat — ketik Nama atau NIP, lalu pilih")
 
-            # heuristik kolom nama/nip
+            # Heuristik kolom nama/nip
             name_cols = [c for c in df_current.columns if "nama" in str(c).lower()]
             nip_cols = [c for c in df_current.columns if "nip" in str(c).lower()]
             primary_name_col = name_cols[0] if name_cols else (df_current.columns[0] if len(df_current.columns) > 0 else None)
@@ -900,14 +904,17 @@ if uploaded_file:
                         st.write("Ringkasan Data")
                         display_summary = matched_rows.copy()
                         for c in display_summary.columns:
-                            display_summary[c] = display_summary[c].where(~display_summary[c].astype(str).str.strip().str.lower().isin(UNWANTED_LABELS), pd.NA)
+                            display_summary[c] = display_summary[c].where(
+                                ~display_summary[c].astype(str).str.strip().str.lower().isin(UNWANTED_LABELS),
+                                pd.NA,
+                            )
                         st.write(display_summary.head(10).fillna("-"))
                         if len(matched_rows) > 1:
                             st.info(f"{len(matched_rows)} hasil cocok. Menampilkan 10 teratas.")
                 else:
                     st.warning("Tidak ditemukan data.")
 
-            # show editable table (cleaned)
+            # Show editable table (cleaned)
             st.data_editor(df_current, num_rows="dynamic", use_container_width=True, height=520)
 
             c1, c2, c3, c4 = st.columns(4)
@@ -934,7 +941,13 @@ if uploaded_file:
                 stats_summary = pd.DataFrame()
                 num_cols = df_current.select_dtypes(include=["number"]).columns.tolist()
                 if num_cols:
-                    stats_summary = df_current[num_cols].describe().transpose().reset_index().rename(columns={"index": "Kolom"})
+                    stats_summary = (
+                        df_current[num_cols]
+                        .describe()
+                        .transpose()
+                        .reset_index()
+                        .rename(columns={"index": "Kolom"})
+                    )
                 df_for_export = df_current.replace("-", pd.NA).copy()
                 df_for_export.columns = [str(c).strip() for c in df_for_export.columns]
                 excel_bytes = download_excel_bytes(df_for_export, stats_summary)
@@ -954,112 +967,151 @@ if uploaded_file:
             st.subheader("📊 Grafik Gabungan (Semua Sheet)")
             export_figs = {}
 
-            all_dfs = []
-            for sheet in sheet_names:
-                try:
-                    tmp_raw = pd.read_excel(uploaded_file, sheet_name=sheet, header=None, dtype=object)
-                    header_row_tmp = detect_header_row(tmp_raw)
-                    df_tmp = pd.read_excel(uploaded_file, sheet_name=sheet, header=header_row_tmp, dtype=object)
-                    df_tmp.columns = clean_column_names(df_tmp.columns)
-                    df_tmp.dropna(how="all", inplace=True)
-                    if not df_tmp.empty:
-                        df_tmp = df_tmp.copy()
-                        df_tmp["sheetname"] = sheet
-                        all_dfs.append(df_tmp)
-                except Exception:
-                    continue
+            try:
+                # --- Pastikan file sumber tersedia ---
+                if "excel_source" in locals() and os.path.exists(excel_source):
+                    sheet_names = pd.ExcelFile(excel_source).sheet_names
+                else:
+                    st.warning("⚠ Tidak ada sumber data Excel yang valid.")
+                    st.stop()
 
-            if all_dfs:
-                df_all = pd.concat(all_dfs, ignore_index=True)
-                df_all.columns = clean_column_names(df_all.columns)
+                # --- Baca semua sheet ---
+                all_dfs = []
+                for sheet in sheet_names:
+                    try:
+                        tmp_raw = pd.read_excel(excel_source, sheet_name=sheet, header=None, dtype=object)
+                        header_row_tmp = detect_header_row(tmp_raw)
+                        df_tmp = pd.read_excel(excel_source, sheet_name=sheet, header=header_row_tmp, dtype=object)
+                        df_tmp.columns = clean_column_names(df_tmp.columns)
+                        df_tmp.dropna(how="all", inplace=True)
+                        if not df_tmp.empty:
+                            df_tmp = df_tmp.copy()
+                            df_tmp["sheetname"] = sheet
+                            all_dfs.append(df_tmp)
+                    except Exception as e:
+                        st.warning(f"⚠ Gagal memproses sheet '{sheet}': {e}")
+                        continue
 
-                # Bar chart per sheet
-                count_per_sheet = df_all["sheetname"].value_counts().reset_index()
-                count_per_sheet.columns = ["Sheet", "Jumlah Data"]
-                fig_sheet = px.bar(
-                    count_per_sheet,
-                    x="Sheet",
-                    y="Jumlah Data",
-                    text="Jumlah Data",
-                    title="Jumlah Baris Data per Sheet (Gabungan Semua Sheet)"
-                )
-                fig_sheet.update_layout(xaxis_tickangle=-45)
-                st.plotly_chart(fig_sheet, use_container_width=True)
-                sheet_text = ", ".join([f"{r['Sheet']}: {r['Jumlah Data']}" for _, r in count_per_sheet.iterrows()])
-                st.markdown(f"Per-sheet: {sheet_text}.")
-                export_figs["Jumlah Baris per Sheet"] = fig_sheet
+                if all_dfs:
+                    df_all = pd.concat(all_dfs, ignore_index=True)
+                    df_all.columns = clean_column_names(df_all.columns)
 
-                # Unit kerja top
-                unit_cols = [c for c in df_all.columns if "unit" in str(c).lower() or "kerja" in str(c).lower() or "unitkerja" in str(c).lower()]
-                if unit_cols:
-                    uc = unit_cols[0]
-                    cleaned_uc = clean_series_for_vc(df_all[uc])
-                    if not cleaned_uc.empty:
-                        top_unit = cleaned_uc.value_counts().reset_index().head(10)
-                        top_unit.columns = ["Unit Kerja", "Jumlah"]
-                        fig_unit = px.bar(
-                            top_unit,
-                            x="Unit Kerja",
-                            y="Jumlah",
-                            text="Jumlah",
-                            title="Top 10 Unit Kerja (Gabungan Semua Sheet)"
-                        )
-                        fig_unit.update_layout(xaxis_tickangle=-45)
-                        st.plotly_chart(fig_unit, use_container_width=True)
-                        top3_text = short_top3_text_from_counts(cleaned_uc.value_counts())
-                        st.markdown(f"Top 3 Unit Kerja: {top3_text}.")
-                        export_figs["Top Unit Kerja"] = fig_unit
+                    # === Grafik: Jumlah Baris per Sheet ===
+                    count_per_sheet = df_all["sheetname"].value_counts().reset_index()
+                    count_per_sheet.columns = ["Sheet", "Jumlah Data"]
 
-                # Gender
-                gender_keys_all = [c for c in df_all.columns if "gender" in str(c).lower() or "jenis kelamin" in str(c).lower()]
-                if gender_keys_all:
-                    gcol_all = gender_keys_all[0]
-                    cleaned_g = clean_series_for_vc(df_all[gcol_all])
-                    if not cleaned_g.empty:
-                        tmpg = cleaned_g.value_counts().reset_index()
-                        tmpg.columns = ["Kategori", "Jumlah"]
-                        figg = px.pie(tmpg, names="Kategori", values="Jumlah", title=f"Proporsi {gcol_all} (Gabungan Semua Sheet)", hole=0.35)
-                        figg.update_traces(textinfo="label+percent", hovertemplate="%{label}: %{value} orang")
-                        st.plotly_chart(figg, use_container_width=True)
-                        vc = cleaned_g.value_counts()
-                        total = int(vc.sum())
-                        parts = [f"{label}: {count} ({count/total*100:.1f}%)" for label, count in vc.items()]
-                        st.markdown("" + ", ".join(parts) + f", Total: {total}.")
-                        export_figs[f"Proporsi {gcol_all}"] = figg
+                    fig_sheet = px.bar(
+                        count_per_sheet,
+                        x="Sheet",
+                        y="Jumlah Data",
+                        text="Jumlah Data",
+                        title="Jumlah Baris Data per Sheet (Gabungan Semua Sheet)"
+                    )
+                    fig_sheet.update_layout(xaxis_tickangle=-45)
+                    st.plotly_chart(fig_sheet, use_container_width=True)
 
-                # Numeric histogram
-                num_cols_all = df_all.select_dtypes(include='number').columns.tolist()
-                if not num_cols_all:
-                    for c in df_all.columns:
-                        try:
-                            conv = pd.to_numeric(df_all[c], errors="coerce")
-                            if conv.dropna().shape[0] > 0:
-                                num_cols_all.append(c)
-                                break
-                        except Exception:
-                            continue
+                    sheet_text = ", ".join([f"{r['Sheet']}: {r['Jumlah Data']}" for _, r in count_per_sheet.iterrows()])
+                    st.markdown(f"Per-sheet: {sheet_text}.")
+                    export_figs["Jumlah Baris per Sheet"] = fig_sheet
 
-                if num_cols_all:
-                    ncol = num_cols_all[0]
-                    nums = pd.to_numeric(df_all[ncol], errors="coerce").dropna()
-                    if not nums.empty:
-                        fig_hist = px.histogram(nums, x=nums, nbins=15, title=f"Distribusi Numerik: {ncol} (Gabungan Semua Sheet)")
-                        st.plotly_chart(fig_hist, use_container_width=True)
-                        st.markdown(f"{ncol} — count: {len(nums)}, mean: {nums.mean():.2f}, median: {nums.median():.2f}.")
-                        export_figs[f"Distribusi {ncol}"] = fig_hist
-            else:
-                st.info("Tidak ditemukan sheet berisi data valid untuk dibuat grafik gabungan.")
+                    # === Grafik: Top 10 Unit Kerja ===
+                    unit_cols = [c for c in df_all.columns if any(k in str(c).lower() for k in ["unit", "kerja", "unitkerja"])]
+                    if unit_cols:
+                        uc = unit_cols[0]
+                        cleaned_uc = clean_series_for_vc(df_all[uc])
+                        if not cleaned_uc.empty:
+                            top_unit = cleaned_uc.value_counts().reset_index().head(10)
+                            top_unit.columns = ["Unit Kerja", "Jumlah"]
+                            fig_unit = px.bar(
+                                top_unit,
+                                x="Unit Kerja",
+                                y="Jumlah",
+                                text="Jumlah",
+                                title="Top 10 Unit Kerja (Gabungan Semua Sheet)"
+                            )
+                            fig_unit.update_layout(xaxis_tickangle=-45)
+                            st.plotly_chart(fig_unit, use_container_width=True)
+                            top3_text = short_top3_text_from_counts(cleaned_uc.value_counts())
+                            st.markdown(f"Top 3 Unit Kerja: {top3_text}.")
+                            export_figs["Top Unit Kerja"] = fig_unit
 
-            # === PDF EXPORT BUTTON ===
-            st.markdown("### 📄 Ekspor Laporan PDF (Grafik Gabungan)")
-            if st.button("⬇ Download Laporan Gabungan (PDF)"):
-                export_dashboard_pdf(export_figs)
+                    # === Grafik: Proporsi Gender ===
+                    gender_keys_all = [c for c in df_all.columns if "gender" in str(c).lower() or "jenis kelamin" in str(c).lower()]
+                    if gender_keys_all:
+                        gcol_all = gender_keys_all[0]
+                        cleaned_g = clean_series_for_vc(df_all[gcol_all])
+                        if not cleaned_g.empty:
+                            tmpg = cleaned_g.value_counts().reset_index()
+                            tmpg.columns = ["Kategori", "Jumlah"]
+                            figg = px.pie(
+                                tmpg,
+                                names="Kategori",
+                                values="Jumlah",
+                                title=f"Proporsi {gcol_all} (Gabungan Semua Sheet)",
+                                hole=0.35
+                            )
+                            figg.update_traces(textinfo="label+percent", hovertemplate="%{label}: %{value} orang")
+                            st.plotly_chart(figg, use_container_width=True)
+                            vc = cleaned_g.value_counts()
+                            total = int(vc.sum())
+                            parts = [f"{label}: {count} ({count/total*100:.1f}%)" for label, count in vc.items()]
+                            st.markdown(", ".join(parts) + f", Total: {total}.")
+                            export_figs[f"Proporsi {gcol_all}"] = figg
 
-        elif menu == "📊 Grafik":
-            # === TAB 2 ===
-            st.subheader("📊 Visualisasi Otomatis")
-            for_display_df = df_current.replace("-", pd.NA).copy()
+                    # === Grafik: Distribusi Kolom Numerik ===
+                    num_cols_all = df_all.select_dtypes(include="number").columns.tolist()
+                    if not num_cols_all:
+                        for c in df_all.columns:
+                            try:
+                                conv = pd.to_numeric(df_all[c], errors="coerce")
+                                if conv.dropna().shape[0] > 0:
+                                    num_cols_all.append(c)
+                                    break
+                            except Exception:
+                                continue
 
+                    if num_cols_all:
+                        ncol = num_cols_all[0]
+                        nums = pd.to_numeric(df_all[ncol], errors="coerce").dropna()
+                        if not nums.empty:
+                            fig_hist = px.histogram(
+                                nums,
+                                x=nums,
+                                nbins=15,
+                                title=f"Distribusi Numerik: {ncol} (Gabungan Semua Sheet)"
+                            )
+                            st.plotly_chart(fig_hist, use_container_width=True)
+                            st.markdown(
+                                f"{ncol} — count: {len(nums)}, mean: {nums.mean():.2f}, median: {nums.median():.2f}."
+                            )
+                            export_figs[f"Distribusi {ncol}"] = fig_hist
+
+                else:
+                    st.info("ℹ️ Tidak ditemukan sheet berisi data valid untuk dibuat grafik gabungan.")
+
+                # === PDF EXPORT BUTTON ===
+                st.markdown("### 📄 Ekspor Laporan PDF (Grafik Gabungan)")
+                if st.button("⬇ Download Laporan Gabungan (PDF)"):
+                    export_dashboard_pdf(export_figs)
+
+            except Exception as e:
+                st.error(f"Terjadi kesalahan saat membuat grafik gabungan: {e}")
+
+    except Exception as e:
+        st.error(f"Terjadi kesalahan utama: {e}")
+
+
+# === MENU GRAFIK ===
+elif menu == "📊 Grafik":
+    st.subheader("📊 Visualisasi Otomatis")
+
+    try:
+        # Pastikan df_current tersedia
+        if "df_current" in st.session_state and not st.session_state["df_current"].empty:
+            for_display_df = st.session_state["df_current"].replace("-", pd.NA).copy()
+            st.write(for_display_df.head())
+
+            # === GRAFIK PROPORSI GENDER ===
             gender_keys = [c for c in for_display_df.columns if "gender" in str(c).lower() or "jenis kelamin" in str(c).lower()]
             if gender_keys:
                 gcol = gender_keys[0]
@@ -1067,14 +1119,22 @@ if uploaded_file:
                 if not cleaned.empty:
                     tmp = cleaned.value_counts().reset_index()
                     tmp.columns = ["Kategori", "Jumlah"]
-                    fig = px.pie(tmp, names="Kategori", values="Jumlah", title=f"Proporsi {gcol}", hole=0.35)
+                    fig = px.pie(
+                        tmp,
+                        names="Kategori",
+                        values="Jumlah",
+                        title=f"Proporsi {gcol}",
+                        hole=0.35
+                    )
                     fig.update_traces(textinfo="label+percent", hovertemplate="%{label}: %{value} orang")
                     st.plotly_chart(fig, use_container_width=True)
+
                     vc = cleaned.value_counts()
                     total = int(vc.sum())
                     parts = [f"{label}: {count} ({count/total*100:.1f}%)" for label, count in vc.items()]
-                    st.markdown("" + ", ".join(parts) + f", Total: {total}.")
+                    st.markdown(", ".join(parts) + f", Total: {total}.")
 
+            # === GRAFIK UNTUK SETIAP KOLOM ===
             for col in for_display_df.columns:
                 try:
                     if for_display_df[col].dtype == object or for_display_df[col].dtype.name == "category":
@@ -1082,52 +1142,85 @@ if uploaded_file:
                         if not vc_series.empty:
                             vc = vc_series.value_counts().reset_index().head(20)
                             vc.columns = ["Kategori", "Jumlah"]
-                            bar = px.bar(vc, x="Kategori", y="Jumlah", text="Jumlah", title=f"Distribusi: {col}")
+                            bar = px.bar(
+                                vc,
+                                x="Kategori",
+                                y="Jumlah",
+                                text="Jumlah",
+                                title=f"Distribusi: {col}"
+                            )
                             bar.update_layout(xaxis_tickangle=-45)
                             st.plotly_chart(bar, use_container_width=True)
+
                             counts = vc_series.value_counts()
                             if not counts.empty:
                                 top3_text = short_top3_text_from_counts(counts)
                                 st.markdown(f"Top 3 {col}: {top3_text}.")
+
                     elif pd.api.types.is_numeric_dtype(for_display_df[col]):
                         nums = pd.to_numeric(for_display_df[col], errors="coerce").dropna()
                         if not nums.empty:
-                            hist = px.histogram(nums, x=nums, nbins=12, title=f"Distribusi Numerik: {col}")
+                            hist = px.histogram(
+                                nums,
+                                x=nums,
+                                nbins=12,
+                                title=f"Distribusi Numerik: {col}"
+                            )
                             st.plotly_chart(hist, use_container_width=True)
                             st.markdown(f"{col} — count: {len(nums)}, mean: {nums.mean():.2f}, median: {nums.median():.2f}.")
                 except Exception as e:
                     st.warning(f"Gagal membuat grafik {col}: {e}")
 
-        elif menu == "📈 Statistik":
-            # === TAB 3 ===
-            st.subheader("📈 Ringkasan Statistik")
-            current_df = df_current.replace("-", pd.NA)
-            num_cols = current_df.select_dtypes(include=["number"]).columns.tolist()
-            if num_cols:
-                st.markdown("Statistik Numerik")
-                st.dataframe(current_df[num_cols].describe().transpose())
+    except Exception as e:
+        st.error(f"Terjadi kesalahan di menu Grafik: {e}")
 
-            cat_cols = current_df.select_dtypes(include=["object", "category"]).columns.tolist()
-            if cat_cols:
-                st.markdown("Top Kategori")
-                for c in cat_cols:
-                    cleaned_ser = clean_series_for_vc(current_df[c])
-                    unique_count = cleaned_ser.nunique()
-                    if unique_count == 0:
-                        continue
-                    st.write(f"{c}** — unik (bersih): {unique_count} item")
-                    vc = cleaned_ser.value_counts().head(10).rename_axis(c).reset_index().rename(columns={"index": c, 0: "Jumlah"})
-                    vc.columns = [c, "Jumlah"]
-                    st.dataframe(vc)
-                    counts = cleaned_ser.value_counts()
-                    if not counts.empty:
-                        top3_text = short_top3_text_from_counts(counts)
-                        st.markdown(f"Top 3 {c}: {top3_text}.")
-            st.markdown("---")
-            st.markdown("<footer>© 2025 Kementerian Kelautan dan Perikanan — Dashboard PPNS</footer>", unsafe_allow_html=True)
+
+# === MENU STATISTIK ===
+elif menu == "📈 Statistik":
+    st.subheader("📈 Ringkasan Statistik")
+
+    try:
+        current_df = df_current.replace("-", pd.NA)
+
+        # --- Statistik Numerik ---
+        num_cols = current_df.select_dtypes(include=["number"]).columns.tolist()
+        if num_cols:
+            st.markdown("### Statistik Numerik")
+            st.dataframe(current_df[num_cols].describe().transpose())
+
+        # --- Statistik Kategori ---
+        cat_cols = current_df.select_dtypes(include=["object", "category"]).columns.tolist()
+        if cat_cols:
+            st.markdown("### Top Kategori")
+            for c in cat_cols:
+                cleaned_ser = clean_series_for_vc(current_df[c])
+                unique_count = cleaned_ser.nunique()
+                if unique_count == 0:
+                    continue
+
+                st.write(f"**{c}** — unik (bersih): {unique_count} item")
+
+                vc = cleaned_ser.value_counts().head(10).rename_axis(c).reset_index()
+                vc.columns = [c, "Jumlah"]
+                st.dataframe(vc)
+
+                counts = cleaned_ser.value_counts()
+                if not counts.empty:
+                    top3_text = short_top3_text_from_counts(counts)
+                    st.markdown(f"Top 3 {c}: {top3_text}.")
+
+        # --- Footer ---
+        st.markdown("---")
+        st.markdown(
+            "<footer style='text-align:center; color:gray;'>"
+            "© 2025 Kementerian Kelautan dan Perikanan — Dashboard PPNS"
+            "</footer>",
+            unsafe_allow_html=True,
+        )
 
     except Exception as e:
         st.error(f"Terjadi kesalahan saat membaca file: {e}")
+
 else:
     st.info("📥 Silakan upload file Excel terlebih dahulu.")
 
